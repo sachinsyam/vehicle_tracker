@@ -76,5 +76,11 @@ class AppDatabase {
     await _serviceStore.delete(db, finder: finder);
   }
 
+// Updates an existing vehicle (matches by ID)
+  Future<void> updateVehicle(Vehicle vehicle) async {
+    final db = await database;
+    final finder = Finder(filter: Filter.byKey(vehicle.id));
+    await _vehicleStore.update(db, vehicle.toMap(), finder: finder);
+  }
 
 }

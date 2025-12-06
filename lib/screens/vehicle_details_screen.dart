@@ -15,71 +15,32 @@ class VehicleDetailsScreen extends ConsumerWidget {
     final recordsAsync = ref.watch(serviceRecordsProvider(vehicle.id!));
 
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: Text(vehicle.name),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(onPressed: () {}, icon: const Icon(Icons.settings_outlined))
+        ],
       ),
       body: Column(
         children: [
-          // Header Stats
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey.shade200,
-            width: double.infinity,
-            child: Column(
-              children: [
-                Text('Current ODO: ${vehicle.currentOdo} km',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('${vehicle.make} ${vehicle.model}'),
-              ],
-            ),
-          ),
-
-          // The List
+          _buildHeader(context),
+          const SizedBox(height: 10),
           Expanded(
             child: recordsAsync.when(
               data: (records) {
-                if (records.isEmpty) return const Center(child: Text('No service history yet.'));
-
+                if (records.isEmpty) return _buildEmptyLog();
                 return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   itemCount: records.length,
                   itemBuilder: (context, index) {
-                    final record = records[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.blue.shade100,
-                        child: const Icon(Icons.build, color: Colors.blue),
-                      ),
-                      title: Text(record.serviceType, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      // Display Date, Cost, and ODO in the subtitle for a clean look
-                      subtitle: Text(
-                        '${DateFormat('MMM dd, yyyy').format(record.date)}\n₹${record.cost.toStringAsFixed(0)} • ${record.odoReading} km',
-                        style: const TextStyle(height: 1.5),
-                      ),
-                      isThreeLine: true, // Allows subtitle to take 2 lines
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'edit') {
-                            _showServiceDialog(context, ref, recordToEdit: record);
-                          } else if (value == 'delete') {
-                            _confirmDelete(context, ref, record.id!);
-                          }
-                        },
-                        itemBuilder: (BuildContext context) => [
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [Icon(Icons.edit, color: Colors.green), SizedBox(width: 8), Text('Edit')],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [Icon(Icons.delete, color: Colors.red), SizedBox(width: 8), Text('Delete')],
-                            ),
-                          ),
-                        ],
-                      ),
+                    final isLast = index == records.length - 1;
+                    return _TimelineItem(
+                      record: records[index],
+                      isLast: isLast,
+                      ref: ref,
+                      onEdit: () => _showServiceDialog(context, ref, recordToEdit: records[index]),
+                      onDelete: () => _confirmDelete(context, ref, records[index].id!),
                     );
                   },
                 );
@@ -98,8 +59,63 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
-  // Handle Delete
-  void _confirmDelete(BuildContext context, WidgetRef ref, int recordId) {
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primary.withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.two_wheeler, size: 40, color: Colors.white),
+          const SizedBox(height: 10),
+          Text(
+            '${vehicle.currentOdo} km',
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          Text(
+            '${vehicle.make} ${vehicle.model}',
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyLog() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.history, size: 60, color: Colors.grey),
+          SizedBox(height: 10),
+          Text('No service history recorded.'),
+        ],
+      ),
+    );
+  }
+
+  // --- KEEP YOUR EXISTING DIALOG FUNCTIONS ---
+  // Paste _confirmDelete and _showServiceDialog from the previous step here.
+  // I am omitting them to save space, but they are exactly the same as before.
+   void _confirmDelete(BuildContext context, WidgetRef ref, int recordId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -227,6 +243,128 @@ class VehicleDetailsScreen extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+// --- VISUAL COMPONENT: TIMELINE ITEM ---
+class _TimelineItem extends StatelessWidget {
+  final ServiceRecord record;
+  final bool isLast;
+  final WidgetRef ref;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _TimelineItem({
+    required this.record, 
+    required this.isLast, 
+    required this.ref,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. The Timeline Line
+          Column(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: Colors.grey.shade300,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 20),
+          
+          // 2. The Content Card
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Date
+                  Text(
+                    DateFormat('MMM dd, yyyy').format(record.date),
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.shade200,
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      title: Text(
+                        record.serviceType,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: [
+                            Icon(Icons.speed, size: 14, color: Colors.grey.shade600),
+                            const SizedBox(width: 4),
+                            Text('${record.odoReading} km'),
+                            const SizedBox(width: 16),
+                            Icon(Icons.currency_rupee, size: 14, color: Theme.of(context).colorScheme.secondary),
+                            Text(
+                              record.cost.toStringAsFixed(0),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        onSelected: (val) {
+                          if (val == 'edit') onEdit();
+                          if (val == 'delete') onDelete();
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

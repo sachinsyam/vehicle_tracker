@@ -20,8 +20,8 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('My Garage'),
         actions: [
-
-PopupMenuButton<String>(
+          // Backup Menu
+          PopupMenuButton<String>(
             onSelected: (value) {
               final backupService = BackupService(context, ref);
               if (value == 'backup') {
@@ -45,38 +45,24 @@ PopupMenuButton<String>(
               ),
             ],
           ),
-
-
-          // 1. IMPORT BUTTON (New)
+          // Import
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Import CSV',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ImportScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImportScreen())),
           ),
-          // 2. EXPENSE REPORT BUTTON (Existing)
+          // Expense Report
           IconButton(
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Expense Report',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ExpenseReportScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpenseReportScreen())),
           ),
         ],
       ),
-
-
       body: vehicleListAsync.when(
         data: (vehicles) {
           if (vehicles.isEmpty) {
-            return _buildEmptyState();
+            return _buildEmptyState(context, ref);
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -89,6 +75,8 @@ PopupMenuButton<String>(
                   context,
                   MaterialPageRoute(builder: (_) => VehicleDetailsScreen(vehicle: vehicles[index])),
                 ),
+                // 👇 Edit Action Trigger
+                onEdit: () => _showVehicleDialog(context, ref, vehicleToEdit: vehicles[index]),
               );
             },
           );
@@ -97,14 +85,14 @@ PopupMenuButton<String>(
         error: (err, stack) => Center(child: Text('Error: $err')),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddVehicleDialog(context, ref),
+        onPressed: () => _showVehicleDialog(context, ref), // Call shared dialog
         label: const Text('Add Vehicle'),
         icon: const Icon(Icons.add_circle_outline),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -116,27 +104,29 @@ PopupMenuButton<String>(
             style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 4),
-          const Text('Add a vehicle to start tracking'),
+          TextButton(
+            onPressed: () => _showVehicleDialog(context, ref), 
+            child: const Text('Add a vehicle now')
+          ),
         ],
       ),
     );
   }
   
-  // Re-use your existing _showAddVehicleDialog function here
-  // (Paste the function from the previous step here)
-  void _showAddVehicleDialog(BuildContext context, WidgetRef ref) {
-     // ... (Keep your existing dialog code, it works fine!)
-     // For brevity, I assume you still have the dialog code. 
-     // Let me know if you need it pasted again.
-     final nameController = TextEditingController();
-    final makeController = TextEditingController();
-    final modelController = TextEditingController();
-    final odoController = TextEditingController();
+  // --- UNIFIED ADD / EDIT DIALOG ---
+  void _showVehicleDialog(BuildContext context, WidgetRef ref, {Vehicle? vehicleToEdit}) {
+    final isEdit = vehicleToEdit != null;
+    
+    // Pre-fill controllers if editing
+    final nameController = TextEditingController(text: isEdit ? vehicleToEdit.name : '');
+    final makeController = TextEditingController(text: isEdit ? vehicleToEdit.make : '');
+    final modelController = TextEditingController(text: isEdit ? vehicleToEdit.model : '');
+    final odoController = TextEditingController(text: isEdit ? vehicleToEdit.currentOdo.toString() : '');
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add Vehicle'),
+        title: Text(isEdit ? 'Edit Vehicle' : 'Add Vehicle'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -153,13 +143,21 @@ PopupMenuButton<String>(
           ElevatedButton(
             onPressed: () async {
               final db = ref.read(databaseProvider);
-              final newVehicle = Vehicle(
+              
+              final vehicle = Vehicle(
+                id: isEdit ? vehicleToEdit.id : null, // Important: Keep ID if editing
                 name: nameController.text,
                 make: makeController.text,
                 model: modelController.text,
                 currentOdo: int.tryParse(odoController.text) ?? 0,
               );
-              await db.insertVehicle(newVehicle);
+
+              if (isEdit) {
+                await db.updateVehicle(vehicle);
+              } else {
+                await db.insertVehicle(vehicle);
+              }
+              
               ref.refresh(vehicleListProvider);
               if (context.mounted) Navigator.pop(context);
             },
@@ -174,8 +172,9 @@ PopupMenuButton<String>(
 class _VehicleCard extends StatelessWidget {
   final Vehicle vehicle;
   final VoidCallback onTap;
+  final VoidCallback onEdit; // 👈 Add Edit Callback
 
-  const _VehicleCard({required this.vehicle, required this.onTap});
+  const _VehicleCard({required this.vehicle, required this.onTap, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -213,20 +212,22 @@ class _VehicleCard extends StatelessWidget {
               ),
               // ODO Chip
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: const EdgeInsets.only(right: 8),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.speed, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text('${vehicle.currentOdo} km', 
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ],
-                ),
+                child: Text('${vehicle.currentOdo} km', 
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+              ),
+              // Edit Button
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
+                onPressed: onEdit,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(), // Removes default padding
               ),
             ],
           ),

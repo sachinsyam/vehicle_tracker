@@ -6,6 +6,7 @@ import '../data/models.dart';
 import 'vehicle_details_screen.dart';
 import 'expense_report_screen.dart';
 import 'import_screen.dart';
+import '../services/backup_service.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -19,6 +20,33 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('My Garage'),
         actions: [
+
+PopupMenuButton<String>(
+            onSelected: (value) {
+              final backupService = BackupService(context, ref);
+              if (value == 'backup') {
+                backupService.createBackup();
+              } else if (value == 'restore') {
+                backupService.restoreBackup();
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                value: 'backup',
+                child: Row(
+                  children: [Icon(Icons.download, color: Colors.blue), SizedBox(width: 10), Text('Download CSV Backup')],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'restore',
+                child: Row(
+                  children: [Icon(Icons.upload, color: Colors.green), SizedBox(width: 10), Text('Restore from CSV')],
+                ),
+              ),
+            ],
+          ),
+
+
           // 1. IMPORT BUTTON (New)
           IconButton(
             icon: const Icon(Icons.upload_file),

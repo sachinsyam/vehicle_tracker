@@ -83,4 +83,13 @@ class AppDatabase {
     await _vehicleStore.update(db, vehicle.toMap(), finder: finder);
   }
 
+  // --- Expense Report Queries ---
+  Future<List<ServiceRecord>> getAllServiceRecords() async {
+    final db = await database;
+    // Sort by Date (Newest first)
+    final finder = Finder(sortOrders: [SortOrder('date', false)]);
+    final snapshots = await _serviceStore.find(db, finder: finder);
+    return snapshots.map((s) => ServiceRecord.fromMap(s.key, s.value)).toList();
+  }
+
 }

@@ -37,6 +37,7 @@ class ServiceRecord {
   final int odoReading;
   final String serviceType;
   final double cost;
+  final String notes;
 
   ServiceRecord({
     this.id,
@@ -45,6 +46,7 @@ class ServiceRecord {
     required this.odoReading,
     required this.serviceType,
     required this.cost,
+    this.notes = '',
   });
 
   Map<String, dynamic> toMap() {
@@ -54,6 +56,7 @@ class ServiceRecord {
       'odoReading': odoReading,
       'serviceType': serviceType,
       'cost': cost,
+      'notes': notes,
     };
   }
 
@@ -65,6 +68,7 @@ class ServiceRecord {
       odoReading: map['odoReading'] as int,
       serviceType: map['serviceType'] as String,
       cost: (map['cost'] as num).toDouble(),
+      notes: map['notes'] as String? ?? '',
     );
   }
 }

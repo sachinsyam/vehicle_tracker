@@ -15,3 +15,9 @@ final serviceRecordsProvider = FutureProvider.family<List<ServiceRecord>, int>((
   final db = ref.read(databaseProvider);
   return db.getRecordsForVehicle(vehicleId);
 });
+
+// Fetch ALL records for the expense report
+final allExpensesProvider = FutureProvider<List<ServiceRecord>>((ref) async {
+  final db = ref.read(databaseProvider);
+  return db.getAllServiceRecords();
+});

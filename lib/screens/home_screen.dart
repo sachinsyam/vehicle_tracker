@@ -4,6 +4,8 @@ import '../providers.dart';
 import '../data/database.dart';
 import '../data/models.dart';
 import 'vehicle_details_screen.dart';
+import 'expense_report_screen.dart';
+import 'import_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -14,7 +16,35 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(title: const Text('My Garage')),
+      appBar: AppBar(
+        title: const Text('My Garage'),
+        actions: [
+          // 1. IMPORT BUTTON (New)
+          IconButton(
+            icon: const Icon(Icons.upload_file),
+            tooltip: 'Import CSV',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ImportScreen()),
+              );
+            },
+          ),
+          // 2. EXPENSE REPORT BUTTON (Existing)
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Expense Report',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ExpenseReportScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+
+
       body: vehicleListAsync.when(
         data: (vehicles) {
           if (vehicles.isEmpty) {

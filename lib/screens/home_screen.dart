@@ -6,6 +6,7 @@ import '../data/models.dart';
 import 'vehicle_details_screen.dart';
 import 'expense_report_screen.dart';
 import 'import_screen.dart';
+import 'about_screen.dart'; // 👈 Added Import
 import '../services/backup_service.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -27,6 +28,12 @@ class HomeScreen extends ConsumerWidget {
                 backupService.createBackup();
               } else if (value == 'restore') {
                 backupService.restoreBackup();
+              } else if (value == 'about') {
+                // 👇 Navigate to About Screen
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => const AboutScreen())
+                );
               }
             },
             itemBuilder: (BuildContext context) => [
@@ -40,6 +47,14 @@ class HomeScreen extends ConsumerWidget {
                 value: 'restore',
                 child: Row(
                   children: [Icon(Icons.upload, color: Colors.green), SizedBox(width: 10), Text('Restore from CSV')],
+                ),
+              ),
+              const PopupMenuDivider(), // Optional divider
+              // 👇 New About Item
+              const PopupMenuItem(
+                value: 'about',
+                child: Row(
+                  children: [Icon(Icons.info_outline, color: Colors.grey), SizedBox(width: 10), Text('About')],
                 ),
               ),
             ],
@@ -203,9 +218,6 @@ class _VehicleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Optional: Calculate 'Real' total for display if you want, 
-    // or just show the DB value. Here we just show DB value.
-    
     return Card(
       child: InkWell(
         onTap: onTap,

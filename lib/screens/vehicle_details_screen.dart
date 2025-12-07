@@ -40,7 +40,6 @@ class VehicleDetailsScreen extends ConsumerWidget {
           // --- CALCULATIONS ---
           
           // 1. Calculate the TRUE current ODO (Max of History vs DB)
-          // This ensures we always have the latest value for validation
           int displayOdo = vehicle.currentOdo;
           if (records.isNotEmpty) {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
@@ -80,7 +79,6 @@ class VehicleDetailsScreen extends ConsumerWidget {
                           isLast: index == records.length - 1,
                           ref: ref,
                           onTap: () => _showDetailsDialog(context, records[index]),
-                          // Pass displayOdo here too, though usually not needed for edits
                           onEdit: () => _showServiceDialog(context, ref, recordToEdit: records[index], currentOdo: displayOdo),
                           onDelete: () => _confirmDelete(context, ref, records[index].id!),
                         );
@@ -95,14 +93,12 @@ class VehicleDetailsScreen extends ConsumerWidget {
       ),
       floatingActionButton: recordsAsync.when(
         data: (records) {
-          // Recalculate ODO for the FAB action
           int displayOdo = vehicle.currentOdo;
           if (records.isNotEmpty) {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
             if (maxHistory > displayOdo) displayOdo = maxHistory;
           }
           return FloatingActionButton.extended(
-            // 👇 PASSING THE LATEST ODO HERE
             onPressed: () => _showServiceDialog(context, ref, currentOdo: displayOdo),
             label: const Text('Add Service'),
             icon: const Icon(Icons.add),
@@ -114,6 +110,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
+  // --- HEADER ---
   Widget _buildHeader(BuildContext context, WidgetRef ref, int displayOdo, double yearCost, List<Vehicle> allVehicles) {
     return Container(
       width: double.infinity,
@@ -142,22 +139,12 @@ class VehicleDetailsScreen extends ConsumerWidget {
                       isExpanded: true,
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Roboto'),
                       items: allVehicles.map((v) {
-                        return DropdownMenuItem<int>(
-                          value: v.id,
-                          child: Text(v.name, overflow: TextOverflow.ellipsis),
-                        );
+                        return DropdownMenuItem<int>(value: v.id, child: Text(v.name, overflow: TextOverflow.ellipsis));
                       }).toList(),
                       onChanged: (newId) {
                         if (newId != null && newId != vehicle.id) {
                           final newVehicle = allVehicles.firstWhere((v) => v.id == newId);
-                          Navigator.pushReplacement(
-                            context,
-                            PageRouteBuilder(
-                              pageBuilder: (context, anim1, anim2) => VehicleDetailsScreen(vehicle: newVehicle),
-                              transitionDuration: Duration.zero,
-                              reverseTransitionDuration: Duration.zero,
-                            ),
-                          );
+                          Navigator.pushReplacement(context, PageRouteBuilder(pageBuilder: (context, anim1, anim2) => VehicleDetailsScreen(vehicle: newVehicle), transitionDuration: Duration.zero, reverseTransitionDuration: Duration.zero));
                         }
                       },
                     ),
@@ -165,11 +152,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.directions_car, size: 28, color: Colors.white),
-              ),
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.directions_car, size: 28, color: Colors.white)),
             ],
           ),
           const SizedBox(height: 20),
@@ -179,7 +162,6 @@ class VehicleDetailsScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               InkWell(
-                // 👇 PASSING LATEST ODO
                 onTap: () => _showUpdateOdoDialog(context, ref, currentOdo: displayOdo),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,46 +187,59 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
-  // --- ODO UPDATE DIALOG ---
+  // --- MANUAL ODO UPDATE (With Offset Logic) ---
   void _showUpdateOdoDialog(BuildContext context, WidgetRef ref, {required int currentOdo}) {
-    final odoController = TextEditingController(text: currentOdo.toString());
+    // PRE-FILL LOGIC: Subtract offset so user sees Dashboard Reading
+    int initialValue = currentOdo;
+    if (vehicle.odoOffset > 0 && currentOdo > vehicle.odoOffset) {
+      initialValue = currentOdo - vehicle.odoOffset;
+    }
+    
+    final odoController = TextEditingController(text: initialValue.toString());
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Update ODO Reading'),
+        title: const Text('Update ODO'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('This will add a record to your timeline.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text('Enter the reading on your dashboard.', style: TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 10),
-            TextField(controller: odoController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'New ODO', suffixText: 'km')),
+            TextField(
+              controller: odoController, 
+              keyboardType: TextInputType.number, 
+              decoration: InputDecoration(
+                labelText: 'Dashboard Reading', 
+                suffixText: 'km',
+                helperText: vehicle.odoOffset > 0 ? '+ ${vehicle.odoOffset} km offset' : null,
+              )
+            ),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
              onPressed: () async {
-              final newOdo = int.tryParse(odoController.text);
-              if (newOdo != null) {
-                // 👇 VALIDATION USING THE PASSED 'currentOdo'
-                if (newOdo < currentOdo) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New ODO cannot be lower than current ODO!'), backgroundColor: Colors.red));
-                  return;
-                }
+              final int inputReading = int.tryParse(odoController.text) ?? 0;
+              final int finalOdo = inputReading + vehicle.odoOffset;
 
-                final db = ref.read(databaseProvider);
-                final record = ServiceRecord(vehicleId: vehicle.id!, date: DateTime.now(), serviceType: 'ODO Update', cost: 0, odoReading: newOdo, notes: 'Manual reading update');
-                await db.insertServiceRecord(record);
-                
-                final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: newOdo);
-                await db.updateVehicle(updatedVehicle);
-                
-                ref.refresh(vehicleListProvider);
-                ref.refresh(serviceRecordsProvider(vehicle.id!));
-                ref.refresh(allExpensesProvider);
-                if (context.mounted) Navigator.pop(context);
+              if (finalOdo < currentOdo) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New Total cannot be lower than Current Total!'), backgroundColor: Colors.red));
+                return;
               }
+              
+              final db = ref.read(databaseProvider);
+              final record = ServiceRecord(vehicleId: vehicle.id!, date: DateTime.now(), serviceType: 'ODO Update', cost: 0, odoReading: finalOdo, notes: 'Manual update (Reading: $inputReading)');
+              await db.insertServiceRecord(record);
+              
+              final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: finalOdo, odoOffset: vehicle.odoOffset);
+              await db.updateVehicle(updatedVehicle);
+              
+              ref.refresh(vehicleListProvider);
+              ref.refresh(serviceRecordsProvider(vehicle.id!));
+              ref.refresh(allExpensesProvider);
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Update'),
           ),
@@ -253,7 +248,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
-  // --- SERVICE DIALOG ---
+  // --- SERVICE DIALOG (With Offset Logic) ---
   void _showServiceDialog(BuildContext context, WidgetRef ref, {ServiceRecord? recordToEdit, required int currentOdo}) {
     final isEdit = recordToEdit != null;
     String initialType = kTrackedServices[0];
@@ -262,10 +257,20 @@ class VehicleDetailsScreen extends ConsumerWidget {
       else initialType = 'Other';
     }
 
+    String initialOdoText = '';
+    if (isEdit) {
+      int raw = recordToEdit.odoReading;
+      if (vehicle.odoOffset > 0 && raw > vehicle.odoOffset) raw -= vehicle.odoOffset;
+      initialOdoText = raw.toString();
+    } else {
+      int raw = currentOdo;
+      if (vehicle.odoOffset > 0 && raw > vehicle.odoOffset) raw -= vehicle.odoOffset;
+      initialOdoText = raw.toString();
+    }
+
     final customTypeController = TextEditingController(text: isEdit ? recordToEdit.serviceType : '');
     final costController = TextEditingController(text: isEdit ? recordToEdit.cost.toString() : '');
-    // Pre-fill with existing ODO if editing, else use current max ODO
-    final odoController = TextEditingController(text: isEdit ? recordToEdit.odoReading.toString() : currentOdo.toString());
+    final odoController = TextEditingController(text: initialOdoText);
     final notesController = TextEditingController(text: isEdit ? recordToEdit.notes : '');
     DateTime selectedDate = isEdit ? recordToEdit.date : DateTime.now();
     String selectedDropdown = initialType;
@@ -290,7 +295,14 @@ class VehicleDetailsScreen extends ConsumerWidget {
                     ),
                     if (isOther) TextField(controller: customTypeController, decoration: const InputDecoration(labelText: 'Custom Name')),
                     TextField(controller: costController, decoration: const InputDecoration(labelText: 'Cost (₹)'), keyboardType: TextInputType.number),
-                    TextField(controller: odoController, decoration: const InputDecoration(labelText: 'ODO Reading'), keyboardType: TextInputType.number),
+                    TextField(
+                      controller: odoController, 
+                      decoration: InputDecoration(
+                        labelText: 'Dashboard Reading', 
+                        helperText: vehicle.odoOffset > 0 ? '+ ${vehicle.odoOffset} km offset' : null
+                      ), 
+                      keyboardType: TextInputType.number
+                    ),
                     TextField(controller: notesController, decoration: const InputDecoration(labelText: 'Notes (Optional)'), maxLines: 2),
                     const SizedBox(height: 20),
                     Row(
@@ -307,11 +319,11 @@ class VehicleDetailsScreen extends ConsumerWidget {
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: () async {
-                    final int newOdo = int.tryParse(odoController.text) ?? 0;
-                    
-                    // 👇 VALIDATION: Only block NEW entries if lower than current
-                    if (!isEdit && newOdo < currentOdo) {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New ODO cannot be less than current!'), backgroundColor: Colors.red));
+                    final int inputReading = int.tryParse(odoController.text) ?? 0;
+                    final int finalOdo = inputReading + vehicle.odoOffset;
+
+                    if (!isEdit && finalOdo < currentOdo) {
+                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New Total cannot be less than current!'), backgroundColor: Colors.red));
                        return;
                     }
 
@@ -324,15 +336,15 @@ class VehicleDetailsScreen extends ConsumerWidget {
                       date: selectedDate, 
                       serviceType: finalType, 
                       cost: double.tryParse(costController.text) ?? 0.0, 
-                      odoReading: newOdo, 
+                      odoReading: finalOdo, 
                       notes: notesController.text.trim()
                     );
 
                     if (isEdit) await db.updateServiceRecord(record);
                     else await db.insertServiceRecord(record);
 
-                    if (newOdo > currentOdo) {
-                      final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: newOdo);
+                    if (finalOdo > currentOdo) {
+                      final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: finalOdo, odoOffset: vehicle.odoOffset);
                       await db.updateVehicle(updatedVehicle);
                       ref.refresh(vehicleListProvider);
                     }
@@ -350,7 +362,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
-  // --- DETAILS & HELPERS ---
+  // --- DETAILS ---
   void _showDetailsDialog(BuildContext context, ServiceRecord record) {
     showDialog(context: context, builder: (context) { return AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), title: Row(children: [CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(Icons.build, color: Theme.of(context).colorScheme.primary)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(record.serviceType, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), Text(DateFormat('MMMM dd, yyyy').format(record.date), style: TextStyle(fontSize: 12, color: Colors.grey.shade600))]))]), content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [const Divider(), const SizedBox(height: 10), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildDetailItem(context, Icons.currency_rupee, 'Cost', '₹${record.cost.toStringAsFixed(0)}'), _buildDetailItem(context, Icons.speed, 'ODO', '${record.odoReading} km')]), const SizedBox(height: 20), const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), const SizedBox(height: 5), Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)), child: Text(record.notes.isEmpty ? 'No notes added.' : record.notes, style: TextStyle(color: record.notes.isEmpty ? Colors.grey : Colors.black87, fontStyle: record.notes.isEmpty ? FontStyle.italic : FontStyle.normal)))]), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]); });
   }
@@ -372,7 +384,6 @@ class VehicleDetailsScreen extends ConsumerWidget {
   }
 }
 
-// --- DASHBOARD (Uses Months) ---
 // --- DASHBOARD (Shows Distance Driven Since Service) ---
 class _MaintenanceDashboard extends StatelessWidget {
   final int vehicleOdo;
@@ -406,16 +417,13 @@ class _MaintenanceDashboard extends StatelessWidget {
     if (relevantRecords.isNotEmpty) {
       hasData = true;
       relevantRecords.sort((a, b) => b.date.compareTo(a.date));
-      final lastRecord = relevantRecords.first; // This is the latest record due to sort
+      final lastRecord = relevantRecords.first; 
       
-      // --- LOGIC CHANGE: Distance Driven Since Service ---
       final distDriven = vehicleOdo - lastRecord.odoReading;
-      // Prevent negative numbers if you accidentaly entered a future ODO
       final safeDist = distDriven < 0 ? 0 : distDriven;
       
       mainValue = '$safeDist km'; 
       
-      // Keep the time context (it's still useful to know if it was 1 year ago)
       final diff = DateTime.now().difference(lastRecord.date).inDays;
       if (diff < 30) {
         subValue = '$diff days ago';

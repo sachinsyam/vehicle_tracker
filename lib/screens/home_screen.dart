@@ -20,7 +20,6 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('My Garage'),
         actions: [
-          // Backup Menu
           PopupMenuButton<String>(
             onSelected: (value) {
               final backupService = BackupService(context, ref);
@@ -45,20 +44,31 @@ class HomeScreen extends ConsumerWidget {
               ),
             ],
           ),
-          // Import
+          // 1. IMPORT BUTTON
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Import CSV',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImportScreen())),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ImportScreen()),
+              );
+            },
           ),
-          // Expense Report
+          // 2. EXPENSE REPORT BUTTON
           IconButton(
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Expense Report',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpenseReportScreen())),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ExpenseReportScreen()),
+              );
+            },
           ),
         ],
       ),
+
       body: vehicleListAsync.when(
         data: (vehicles) {
           if (vehicles.isEmpty) {
@@ -122,6 +132,8 @@ class HomeScreen extends ConsumerWidget {
     final makeController = TextEditingController(text: isEdit ? vehicleToEdit.make : '');
     final modelController = TextEditingController(text: isEdit ? vehicleToEdit.model : '');
     final odoController = TextEditingController(text: isEdit ? vehicleToEdit.currentOdo.toString() : '');
+    // 👇 NEW OFFSET CONTROLLER
+    final offsetController = TextEditingController(text: isEdit ? vehicleToEdit.odoOffset.toString() : '0');
 
     showDialog(
       context: context,
@@ -135,6 +147,18 @@ class HomeScreen extends ConsumerWidget {
               TextField(controller: makeController, decoration: const InputDecoration(labelText: 'Make', prefixIcon: Icon(Icons.branding_watermark))),
               TextField(controller: modelController, decoration: const InputDecoration(labelText: 'Model', prefixIcon: Icon(Icons.car_repair))),
               TextField(controller: odoController, decoration: const InputDecoration(labelText: 'Current ODO', prefixIcon: Icon(Icons.speed)), keyboardType: TextInputType.number),
+              
+              const SizedBox(height: 10),
+              // 👇 NEW INPUT FIELD FOR OFFSET
+              TextField(
+                controller: offsetController, 
+                decoration: const InputDecoration(
+                  labelText: 'ODO Offset (Optional)', 
+                  prefixIcon: Icon(Icons.exposure_plus_1),
+                  helperText: 'Added to dashboard reading automatically',
+                ), 
+                keyboardType: TextInputType.number
+              ),
             ],
           ),
         ),
@@ -150,6 +174,7 @@ class HomeScreen extends ConsumerWidget {
                 make: makeController.text,
                 model: modelController.text,
                 currentOdo: int.tryParse(odoController.text) ?? 0,
+                odoOffset: int.tryParse(offsetController.text) ?? 0, // 👈 SAVE OFFSET
               );
 
               if (isEdit) {
@@ -172,12 +197,15 @@ class HomeScreen extends ConsumerWidget {
 class _VehicleCard extends StatelessWidget {
   final Vehicle vehicle;
   final VoidCallback onTap;
-  final VoidCallback onEdit; // 👈 Add Edit Callback
+  final VoidCallback onEdit;
 
   const _VehicleCard({required this.vehicle, required this.onTap, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
+    // Optional: Calculate 'Real' total for display if you want, 
+    // or just show the DB value. Here we just show DB value.
+    
     return Card(
       child: InkWell(
         onTap: onTap,
@@ -227,7 +255,7 @@ class _VehicleCard extends StatelessWidget {
                 icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
                 onPressed: onEdit,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(), // Removes default padding
+                constraints: const BoxConstraints(),
               ),
             ],
           ),

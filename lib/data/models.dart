@@ -5,8 +5,16 @@ class Vehicle {
   final String make;
   final String model;
   final int currentOdo;
+  final int odoOffset; // 👈 NEW FIELD: Stores the 'hidden' mileage
 
-  Vehicle({this.id, required this.name, required this.make, this.model = '', required this.currentOdo});
+  Vehicle({
+    this.id, 
+    required this.name, 
+    required this.make, 
+    this.model = '', 
+    required this.currentOdo,
+    this.odoOffset = 0, // 👈 Default to 0 so it doesn't break existing data
+  });
 
   // Convert to Map for saving
   Map<String, dynamic> toMap() {
@@ -15,6 +23,7 @@ class Vehicle {
       'make': make,
       'model': model,
       'currentOdo': currentOdo,
+      'odoOffset': odoOffset, // 👈 Save it
     };
   }
 
@@ -26,6 +35,7 @@ class Vehicle {
       make: map['make'] as String,
       model: map['model'] as String,
       currentOdo: map['currentOdo'] as int,
+      odoOffset: (map['odoOffset'] as int?) ?? 0, // 👈 Load it (safe null check)
     );
   }
 }

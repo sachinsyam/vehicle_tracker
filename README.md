@@ -1,16 +1,16 @@
-# vehicle_tracker
+# 🚗 My Garage (VMT)
+## The ultimate offline-first vehicle maintenance tracker. Track service history, expenses, and mileage for all your vehicles in one sleek, modern app. Zero server lock-in.
 
-A new Flutter project.
+## ✨ Key Features
 
-## Getting Started
+🛠️ Service History: Log maintenance with costs, dates, and custom notes.
 
-This project is a starting point for a Flutter application.
+📊 Smart Dashboard: Instantly see distance driven since your last oil change or service.
 
-A few resources to get you started if this is your first Flutter project:
+🔢 Odometer Offset: Support for vehicles with replaced speedometers (automatically adds offset).
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+🔐 100% Offline: Data lives on your device. No accounts, no servers.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+📂 Data Freedom: Full CSV Backup & Restore. Save to Google Drive, Files, or WhatsApp
+
+APK Download

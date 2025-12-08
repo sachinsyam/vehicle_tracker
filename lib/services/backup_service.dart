@@ -7,6 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
+import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import '../data/database.dart';
 import '../data/models.dart';
 import '../providers.dart';
@@ -17,11 +19,13 @@ class BackupService {
 
   BackupService(this.context, this.ref);
 
-  // --- 1. EXPORT TO CSV (Backup) ---
+  // ==============================================================================
+  // 1. NATIVE EXPORT (Creates ZIP with Vehicles.csv and service_record.csv)
+  // ==============================================================================
   Future<void> createBackup() async {
     try {
       final db = ref.read(databaseProvider);
-      final vehicles = await db.getAllVehicles(); // You need to ensure this method exists in database.dart
+      final vehicles = await db.getAllVehicles();
       final records = await db.getAllServiceRecords();
 
       if (vehicles.isEmpty) {
@@ -29,139 +33,167 @@ class BackupService {
         return;
       }
 
-      // 1. Build CSV Rows
-      List<List<dynamic>> rows = [];
+      // --- A. Generate Vehicles.csv ---
+      List<List<dynamic>> vRows = [];
+      vRows.add(['VehicleName', 'Make', 'Model', 'CurrentODO', 'Offset']); // Header
       
-      // Header
-      rows.add(['VehicleName', 'Date', 'ServiceType', 'Cost', 'ODO', 'Notes']);
+      for (var v in vehicles) {
+        vRows.add([v.name, v.make, v.model, v.currentOdo, v.odoOffset]);
+      }
+      String vehiclesCsv = const ListToCsvConverter().convert(vRows);
 
-      // Data
-      for (var record in records) {
-        // Find vehicle name for this record
-        final vehicle = vehicles.firstWhere(
-          (v) => v.id == record.vehicleId, 
-          orElse: () => Vehicle(name: 'Unknown', make: '', currentOdo: 0)
-        );
-        
-        rows.add([
+      // --- B. Generate service_record.csv ---
+      List<List<dynamic>> sRows = [];
+      sRows.add(['VehicleName', 'Date', 'Type', 'Cost', 'Odometer', 'Notes']); // Header
+
+      for (var r in records) {
+        final vehicle = vehicles.firstWhere((v) => v.id == r.vehicleId, orElse: () => Vehicle(name: 'Unknown', make: '', currentOdo: 0));
+        sRows.add([
           vehicle.name,
-          DateFormat('yyyy-MM-dd').format(record.date),
-          record.serviceType,
-          record.cost,
-          record.odoReading,
-          record.notes
+          DateFormat('yyyy-MM-dd').format(r.date),
+          r.serviceType,
+          r.cost,
+          r.odoReading,
+          r.notes
         ]);
       }
+      String serviceCsv = const ListToCsvConverter().convert(sRows);
 
-      // 2. Convert to String
-      String csvData = const ListToCsvConverter().convert(rows);
+      // --- C. Zip It ---
+      final archive = Archive();
+      archive.addFile(ArchiveFile('Vehicles.csv', vehiclesCsv.length, utf8.encode(vehiclesCsv)));
+      archive.addFile(ArchiveFile('service_record.csv', serviceCsv.length, utf8.encode(serviceCsv)));
 
-      // 3. Save to Temp File
+      final encodedZip = ZipEncoder().encode(archive);
+      if (encodedZip == null) throw Exception('Failed to encode ZIP');
+
+      // --- D. Save & Share ---
       final directory = await getTemporaryDirectory();
       final dateStr = DateFormat('yyyyMMdd').format(DateTime.now());
-      final file = File('${directory.path}/vmt_backup_$dateStr.csv');
-      await file.writeAsString(csvData);
+      final zipFile = File('${directory.path}/vmt_backup_$dateStr.zip');
+      await zipFile.writeAsBytes(encodedZip);
 
-      // 4. Share (This allows "Save to Drive" or "Save to Files")
-      await Share.shareXFiles(
-        [XFile(file.path)], 
-        text: 'My Vehicle Tracker Backup'
-      );
+      await Share.shareXFiles([XFile(zipFile.path)], text: 'My Garage Native Backup');
 
     } catch (e) {
       _showSnack('Backup failed: $e', isError: true);
     }
   }
 
-  // --- 2. RESTORE FROM CSV ---
+  // ==============================================================================
+  // 2. NATIVE RESTORE (Reads specific Native ZIP format)
+  // ==============================================================================
   Future<void> restoreBackup() async {
     try {
-      // 1. Pick File
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv'],
+        allowedExtensions: ['zip'],
+        allowMultiple: false,
       );
 
-      if (result != null) {
-        final file = File(result.files.single.path!);
-        final input = file.openRead();
-        final fields = await input
-            .transform(utf8.decoder)
-            .transform(const CsvToListConverter())
-            .toList();
+      if (result == null) return;
 
-        if (fields.length < 2) {
-          _showSnack('Empty or invalid CSV file.', isError: true);
-          return;
-        }
+      final File zipFile = File(result.files.single.path!);
+      final bytes = await zipFile.readAsBytes();
+      final Archive archive = ZipDecoder().decodeBytes(bytes);
 
-        // 2. Show Confirmation
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Restore Data?'),
-              content: const Text('This will merge the CSV data into your app.\nExisting data will NOT be deleted, but duplicates might occur if you restore twice.'),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _processRestore(fields);
-                  },
-                  child: const Text('Restore'),
-                ),
-              ],
-            ),
-          );
+      String? vehiclesCsvContent;
+      String? serviceCsvContent;
+
+      for (final file in archive) {
+        if (!file.isFile) continue;
+        final filename = file.name.toLowerCase();
+        
+        if (filename.endsWith('vehicles.csv')) {
+          vehiclesCsvContent = utf8.decode(file.content as List<int>);
+        } else if (filename.endsWith('service_record.csv')) {
+          serviceCsvContent = utf8.decode(file.content as List<int>);
         }
       }
+
+      if (vehiclesCsvContent == null || serviceCsvContent == null) {
+        _showSnack('Invalid Backup File: Missing required CSVs.', isError: true);
+        return;
+      }
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Restore Backup?'),
+            content: const Text('This will merge the backup data into your app.\n\nNote: This feature is for restoring backups created by THIS app.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _processNativeRestore(vehiclesCsvContent!, serviceCsvContent!);
+                },
+                child: const Text('Restore'),
+              ),
+            ],
+          ),
+        );
+      }
+
     } catch (e) {
       _showSnack('Restore failed: $e', isError: true);
     }
   }
 
-  Future<void> _processRestore(List<List<dynamic>> rows) async {
+  Future<void> _processNativeRestore(String vInput, String sInput) async {
     final db = ref.read(databaseProvider);
-    final existingVehicles = await db.getAllVehicles();
     int importedCount = 0;
 
-    // Skip Header (i=1)
-    for (var i = 1; i < rows.length; i++) {
-      final row = rows[i];
-      if (row.length < 6) continue;
+    // --- 1. Restore Vehicles ---
+    // 👇 FIXED: Removed eol: '\n' to allow auto-detection of line endings
+    List<List<dynamic>> vRows = const CsvToListConverter(shouldParseNumbers: false).convert(vInput);
+    Map<String, int> vehicleIdMap = {};
 
-      String vName = row[0].toString();
-      String dateStr = row[1].toString();
+    // Skip Header (i=1)
+    for (var i = 1; i < vRows.length; i++) {
+      final row = vRows[i];
+      if (row.length < 4) continue;
+
+      String name = row[0].toString().trim();
+      String make = row[1].toString().trim();
+      String model = row[2].toString().trim();
+      int odo = int.tryParse(row[3].toString()) ?? 0;
+      int offset = (row.length > 4) ? (int.tryParse(row[4].toString()) ?? 0) : 0;
+
+      var existing = await db.getAllVehicles();
+      var match = existing.where((v) => v.name == name);
+
+      if (match.isNotEmpty) {
+        vehicleIdMap[name] = match.first.id!;
+      } else {
+        final newId = await db.insertVehicle(Vehicle(
+          name: name, make: make, model: model, currentOdo: odo, odoOffset: offset
+        ));
+        vehicleIdMap[name] = newId;
+      }
+    }
+
+    // --- 2. Restore Records ---
+    // 👇 FIXED: Removed eol: '\n'
+    List<List<dynamic>> sRows = const CsvToListConverter(shouldParseNumbers: false).convert(sInput);
+    
+    // Skip Header (i=1)
+    for (var i = 1; i < sRows.length; i++) {
+      final row = sRows[i];
+      if (row.length < 5) continue;
+
+      String vName = row[0].toString().trim();
+      int? vehicleId = vehicleIdMap[vName];
+      if (vehicleId == null) continue;
+
+      DateTime date;
+      try { date = DateTime.parse(row[1].toString()); } catch (_) { date = DateTime.now(); }
+      
       String type = row[2].toString();
       double cost = double.tryParse(row[3].toString()) ?? 0.0;
       int odo = int.tryParse(row[4].toString()) ?? 0;
-      String notes = row[5].toString();
-
-      // 1. Find or Create Vehicle
-      // We assume the user creates vehicles by Name.
-      // If "Honda CBR" exists, use it. If not, create it.
-      int vehicleId;
-      var match = existingVehicles.where((v) => v.name == vName);
-      
-      if (match.isNotEmpty) {
-        vehicleId = match.first.id!;
-      } else {
-        // Create new vehicle if it doesn't exist
-        final newId = await db.insertVehicle(Vehicle(
-          name: vName, 
-          make: 'Imported', 
-          model: '', 
-          currentOdo: odo
-        ));
-        vehicleId = newId;
-        // Add to local list cache so we don't create it again in this loop
-        existingVehicles.add(Vehicle(id: newId, name: vName, make: 'Imported', model: '', currentOdo: odo));
-      }
-
-      // 2. Insert Record
-      DateTime date;
-      try { date = DateTime.parse(dateStr); } catch (_) { date = DateTime.now(); }
+      String notes = (row.length > 5) ? row[5].toString() : '';
 
       await db.insertServiceRecord(ServiceRecord(
         vehicleId: vehicleId,
@@ -176,12 +208,14 @@ class BackupService {
 
     ref.refresh(vehicleListProvider);
     ref.refresh(allExpensesProvider);
-    _showSnack('Restored $importedCount records!');
+    _showSnack('Restored $importedCount records successfully!');
   }
 
   void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
-    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
+      );
+    }
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../providers.dart';
+import '../data/database.dart';
 
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
   const AboutScreen({super.key});
 
-  // Replace this with your actual GitHub URL
   final String _repoUrl = 'https://github.com/sachinsyam/vehicle_tracker';
 
   Future<void> _launchUrl() async {
@@ -15,11 +17,11 @@ class AboutScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) { // 👈 Added WidgetRef ref
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -75,6 +77,37 @@ class AboutScreen extends StatelessWidget {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Close'),
+              ),
+
+              // 👇 NUKE DATA BUTTON
+              const SizedBox(height: 40),
+              const Divider(),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () async {
+                  // 1. Delete all data
+                  final db = ref.read(databaseProvider);
+                  await db.deleteAllData();
+                  
+                  // 2. Refresh UI
+                  ref.refresh(vehicleListProvider);
+                  ref.refresh(allExpensesProvider);
+                  
+                  // 3. Show feedback
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('💥 All data permanently deleted!'), 
+                        backgroundColor: Colors.red
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.delete_forever, color: Colors.red),
+                label: const Text(
+                  'NUKE DATA (TESTING ONLY)', 
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
+                ),
               ),
             ],
           ),

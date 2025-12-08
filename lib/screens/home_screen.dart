@@ -6,8 +6,9 @@ import '../data/models.dart';
 import 'vehicle_details_screen.dart';
 import 'expense_report_screen.dart';
 import 'import_screen.dart';
-import 'about_screen.dart'; // 👈 Added Import
+import 'about_screen.dart';
 import '../services/backup_service.dart';
+import '../services/migration_service.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -24,12 +25,18 @@ class HomeScreen extends ConsumerWidget {
           PopupMenuButton<String>(
             onSelected: (value) {
               final backupService = BackupService(context, ref);
+              final migrationService = MigrationService(context, ref);
+
               if (value == 'backup') {
+                // 1. Native Backup (ZIP)
                 backupService.createBackup();
               } else if (value == 'restore') {
+                // 2. Native Restore (ZIP)
                 backupService.restoreBackup();
+              } else if (value == 'migrate') {
+                // 3. 3rd Party Migration (ZIP)
+                migrationService.importFromZip();
               } else if (value == 'about') {
-                // 👇 Navigate to About Screen
                 Navigator.push(
                   context, 
                   MaterialPageRoute(builder: (_) => const AboutScreen())
@@ -37,20 +44,30 @@ class HomeScreen extends ConsumerWidget {
               }
             },
             itemBuilder: (BuildContext context) => [
+              // --- NATIVE BACKUP ---
               const PopupMenuItem(
                 value: 'backup',
                 child: Row(
-                  children: [Icon(Icons.download, color: Colors.blue), SizedBox(width: 10), Text('Download CSV Backup')],
+                  children: [Icon(Icons.save_alt, color: Colors.blue), SizedBox(width: 10), Text('Backup Data')],
                 ),
               ),
+              // --- NATIVE RESTORE ---
               const PopupMenuItem(
                 value: 'restore',
                 child: Row(
-                  children: [Icon(Icons.upload, color: Colors.green), SizedBox(width: 10), Text('Restore from CSV')],
+                  children: [Icon(Icons.restore_page, color: Colors.green), SizedBox(width: 10), Text('Restore Backup')],
                 ),
               ),
-              const PopupMenuDivider(), // Optional divider
-              // 👇 New About Item
+              const PopupMenuDivider(),
+              // --- MIGRATION ---
+              const PopupMenuItem(
+                value: 'migrate',
+                child: Row(
+                  children: [Icon(Icons.move_to_inbox, color: Colors.orange), SizedBox(width: 10), Text('Migrate from Other App')],
+                ),
+              ),
+              const PopupMenuDivider(),
+              // --- ABOUT ---
               const PopupMenuItem(
                 value: 'about',
                 child: Row(
@@ -59,10 +76,11 @@ class HomeScreen extends ConsumerWidget {
               ),
             ],
           ),
-          // 1. IMPORT BUTTON
+          
+          // Import Single CSV Button (Legacy/Manual)
           IconButton(
             icon: const Icon(Icons.upload_file),
-            tooltip: 'Import CSV',
+            tooltip: 'Import Single CSV',
             onPressed: () {
               Navigator.push(
                 context,
@@ -70,7 +88,8 @@ class HomeScreen extends ConsumerWidget {
               );
             },
           ),
-          // 2. EXPENSE REPORT BUTTON
+          
+          // Expense Report Button
           IconButton(
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Expense Report',
@@ -100,7 +119,6 @@ class HomeScreen extends ConsumerWidget {
                   context,
                   MaterialPageRoute(builder: (_) => VehicleDetailsScreen(vehicle: vehicles[index])),
                 ),
-                // 👇 Edit Action Trigger
                 onEdit: () => _showVehicleDialog(context, ref, vehicleToEdit: vehicles[index]),
               );
             },
@@ -110,7 +128,7 @@ class HomeScreen extends ConsumerWidget {
         error: (err, stack) => Center(child: Text('Error: $err')),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showVehicleDialog(context, ref), // Call shared dialog
+        onPressed: () => _showVehicleDialog(context, ref),
         label: const Text('Add Vehicle'),
         icon: const Icon(Icons.add_circle_outline),
       ),
@@ -147,7 +165,6 @@ class HomeScreen extends ConsumerWidget {
     final makeController = TextEditingController(text: isEdit ? vehicleToEdit.make : '');
     final modelController = TextEditingController(text: isEdit ? vehicleToEdit.model : '');
     final odoController = TextEditingController(text: isEdit ? vehicleToEdit.currentOdo.toString() : '');
-    // 👇 NEW OFFSET CONTROLLER
     final offsetController = TextEditingController(text: isEdit ? vehicleToEdit.odoOffset.toString() : '0');
 
     showDialog(
@@ -164,7 +181,6 @@ class HomeScreen extends ConsumerWidget {
               TextField(controller: odoController, decoration: const InputDecoration(labelText: 'Current ODO', prefixIcon: Icon(Icons.speed)), keyboardType: TextInputType.number),
               
               const SizedBox(height: 10),
-              // 👇 NEW INPUT FIELD FOR OFFSET
               TextField(
                 controller: offsetController, 
                 decoration: const InputDecoration(
@@ -184,12 +200,12 @@ class HomeScreen extends ConsumerWidget {
               final db = ref.read(databaseProvider);
               
               final vehicle = Vehicle(
-                id: isEdit ? vehicleToEdit.id : null, // Important: Keep ID if editing
+                id: isEdit ? vehicleToEdit.id : null,
                 name: nameController.text,
                 make: makeController.text,
                 model: modelController.text,
                 currentOdo: int.tryParse(odoController.text) ?? 0,
-                odoOffset: int.tryParse(offsetController.text) ?? 0, // 👈 SAVE OFFSET
+                odoOffset: int.tryParse(offsetController.text) ?? 0,
               );
 
               if (isEdit) {

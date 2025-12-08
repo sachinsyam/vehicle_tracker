@@ -92,4 +92,13 @@ class AppDatabase {
     return snapshots.map((s) => ServiceRecord.fromMap(s.key, s.value)).toList();
   }
 
+  // --- NUKE DATA (FOR TESTING) ---
+  Future<void> deleteAllData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await _vehicleStore.delete(txn);
+      await _serviceStore.delete(txn);
+    });
+  }
+
 }

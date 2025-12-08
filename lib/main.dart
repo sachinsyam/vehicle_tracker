@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart'; // Optional: Remove if you don't want to add the package, but standard fonts work too.
+// Optional: Remove if you don't want to add the package, but standard fonts work too.
 import 'screens/home_screen.dart';
 
 void main() {

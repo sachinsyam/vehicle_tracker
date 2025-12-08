@@ -67,7 +67,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                 const Text('Select Target Vehicle:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
-                  value: _selectedVehicleId,
+                  initialValue: _selectedVehicleId,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),

@@ -417,7 +417,7 @@ class _MaintenanceDashboard extends StatelessWidget {
     final relevantRecords = records.where((r) => r.serviceType == type).toList();
     
     String mainValue = '---'; 
-    String subValue = 'Tap to add';
+    String subValue = '---';
     bool hasData = false;
 
     if (relevantRecords.isNotEmpty) {

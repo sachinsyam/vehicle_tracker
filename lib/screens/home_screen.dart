@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers.dart';
+import '../data/database.dart';
 import '../data/models.dart';
 import 'vehicle_details_screen.dart';
 import 'expense_report_screen.dart';
@@ -17,9 +18,12 @@ class HomeScreen extends ConsumerWidget {
     final vehicleListAsync = ref.watch(vehicleListProvider);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      // 👇 CHANGED: Light Grey background makes white cards pop
+      backgroundColor: Colors.grey.shade200, 
       appBar: AppBar(
         title: const Text('My Garage'),
+        backgroundColor: Colors.transparent, // Optional: Makes AppBar blend better
+        elevation: 0,
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -27,13 +31,10 @@ class HomeScreen extends ConsumerWidget {
               final migrationService = MigrationService(context, ref);
 
               if (value == 'backup') {
-                // 1. Native Backup (ZIP)
                 backupService.createBackup();
               } else if (value == 'restore') {
-                // 2. Native Restore (ZIP)
                 backupService.restoreBackup();
               } else if (value == 'migrate') {
-                // 3. 3rd Party Migration (ZIP)
                 migrationService.importFromZip();
               } else if (value == 'about') {
                 Navigator.push(
@@ -43,14 +44,12 @@ class HomeScreen extends ConsumerWidget {
               }
             },
             itemBuilder: (BuildContext context) => [
-              // --- NATIVE BACKUP ---
               const PopupMenuItem(
                 value: 'backup',
                 child: Row(
                   children: [Icon(Icons.save_alt, color: Colors.blue), SizedBox(width: 10), Text('Backup Data')],
                 ),
               ),
-              // --- NATIVE RESTORE ---
               const PopupMenuItem(
                 value: 'restore',
                 child: Row(
@@ -58,7 +57,6 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               const PopupMenuDivider(),
-              // --- MIGRATION ---
               const PopupMenuItem(
                 value: 'migrate',
                 child: Row(
@@ -66,7 +64,6 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               const PopupMenuDivider(),
-              // --- ABOUT ---
               const PopupMenuItem(
                 value: 'about',
                 child: Row(
@@ -76,7 +73,6 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
           
-          // Import Single CSV Button (Legacy/Manual)
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Import Single CSV',
@@ -88,7 +84,6 @@ class HomeScreen extends ConsumerWidget {
             },
           ),
           
-          // Expense Report Button
           IconButton(
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Expense Report',
@@ -155,11 +150,9 @@ class HomeScreen extends ConsumerWidget {
     );
   }
   
-  // --- UNIFIED ADD / EDIT DIALOG ---
   void _showVehicleDialog(BuildContext context, WidgetRef ref, {Vehicle? vehicleToEdit}) {
     final isEdit = vehicleToEdit != null;
     
-    // Pre-fill controllers if editing
     final nameController = TextEditingController(text: isEdit ? vehicleToEdit.name : '');
     final makeController = TextEditingController(text: isEdit ? vehicleToEdit.make : '');
     final modelController = TextEditingController(text: isEdit ? vehicleToEdit.model : '');
@@ -199,12 +192,12 @@ class HomeScreen extends ConsumerWidget {
               final db = ref.read(databaseProvider);
               
               final vehicle = Vehicle(
-                id: isEdit ? vehicleToEdit.id : null,
+                id: isEdit ? vehicleToEdit.id : null, 
                 name: nameController.text,
                 make: makeController.text,
                 model: modelController.text,
                 currentOdo: int.tryParse(odoController.text) ?? 0,
-                odoOffset: int.tryParse(offsetController.text) ?? 0,
+                odoOffset: int.tryParse(offsetController.text) ?? 0, 
               );
 
               if (isEdit) {
@@ -234,6 +227,9 @@ class _VehicleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 2, // Slight elevation makes it stand out on grey
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Colors.white, // Ensure card is white
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),

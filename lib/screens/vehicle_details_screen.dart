@@ -14,30 +14,90 @@ const List<String> kTrackedServices = [
   'Engine Oil', 'Brake Fluid', 'Air Filter', 'Spark Plug', 'Fuel Cleaner', 'Other' 
 ];
 
-class VehicleDetailsScreen extends ConsumerWidget {
+// 👇 Changed to ConsumerStatefulWidget to handle Search State
+class VehicleDetailsScreen extends ConsumerStatefulWidget {
   final Vehicle vehicle;
 
   const VehicleDetailsScreen({super.key, required this.vehicle});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VehicleDetailsScreen> createState() => _VehicleDetailsScreenState();
+}
+
+class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
+  // --- SEARCH STATE ---
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final vehicle = widget.vehicle; // Access vehicle from widget
     final recordsAsync = ref.watch(serviceRecordsProvider(vehicle.id!));
     final allVehiclesAsync = ref.watch(vehicleListProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
+        // 👇 Dynamic Title: Show TextField if searching
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: const TextStyle(color: Color.fromARGB(255, 0, 0, 0)),
+                decoration: const InputDecoration(
+                  hintText: 'Search notes, service type...',
+                  hintStyle: TextStyle(color: Color.fromARGB(179, 114, 107, 107)),
+                  border: InputBorder.none,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.toLowerCase();
+                  });
+                },
+              )
+            : null, // Default empty title to let Header handle context
+        
         actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Import CSV',
-            onPressed: () => _importCsv(context, ref),
-          ),
+          // 👇 Search Toggle Logic
+          if (_isSearching)
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                setState(() {
+                  _isSearching = false;
+                  _searchQuery = '';
+                  _searchController.clear();
+                });
+              },
+            )
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.search),
+              tooltip: 'Search',
+              onPressed: () {
+                setState(() {
+                  _isSearching = true;
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.upload_file),
+              tooltip: 'Import CSV',
+              onPressed: () => _importCsv(context, ref),
+            ),
+          ]
         ],
       ),
       body: recordsAsync.when(
         data: (records) {
-          // --- CALCULATIONS ---
+          // --- CALCULATIONS (Using ALL records) ---
           int displayOdo = vehicle.currentOdo;
           if (records.isNotEmpty) {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
@@ -49,9 +109,17 @@ class VehicleDetailsScreen extends ConsumerWidget {
               .where((r) => r.date.year == currentYear)
               .fold(0.0, (sum, r) => sum + r.cost);
 
+          // --- FILTERING LOGIC ---
+          final filteredRecords = records.where((r) {
+            if (_searchQuery.isEmpty) return true;
+            return r.serviceType.toLowerCase().contains(_searchQuery) ||
+                   r.notes.toLowerCase().contains(_searchQuery) ||
+                   r.cost.toString().contains(_searchQuery);
+          }).toList();
+
           return Column(
             children: [
-              // Banner
+              // Header
               allVehiclesAsync.when(
                 data: (allVehicles) => _buildHeader(context, ref, displayOdo, yearCost, allVehicles),
                 loading: () => const SizedBox(height: 100), 
@@ -63,22 +131,24 @@ class VehicleDetailsScreen extends ConsumerWidget {
 
               const SizedBox(height: 10),
 
-              // Timeline List
+              // Timeline List (Uses FILTERED records)
               Expanded(
-                child: records.isEmpty 
-                  ? _buildEmptyLog() 
+                child: filteredRecords.isEmpty 
+                  ? (_searchQuery.isEmpty 
+                      ? _buildEmptyLog() 
+                      : const Center(child: Text("No records found", style: TextStyle(color: Colors.grey))))
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      itemCount: records.length,
+                      itemCount: filteredRecords.length,
                       itemBuilder: (context, index) {
                         return _TimelineItem(
-                          record: records[index],
-                          isLast: index == records.length - 1,
+                          record: filteredRecords[index],
+                          isLast: index == filteredRecords.length - 1,
                           vehicleOffset: vehicle.odoOffset,
                           ref: ref,
-                          onTap: () => _showDetailsDialog(context, records[index]),
-                          onEdit: () => _showServiceDialog(context, ref, recordToEdit: records[index], currentOdo: displayOdo),
-                          onDelete: () => _confirmDelete(context, ref, records[index].id!),
+                          onTap: () => _showDetailsDialog(context, filteredRecords[index]),
+                          onEdit: () => _showServiceDialog(context, ref, recordToEdit: filteredRecords[index], currentOdo: displayOdo),
+                          onDelete: () => _confirmDelete(context, ref, filteredRecords[index].id!),
                         );
                       },
                     ),
@@ -96,6 +166,9 @@ class VehicleDetailsScreen extends ConsumerWidget {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
             if (maxHistory > displayOdo) displayOdo = maxHistory;
           }
+          // Hide FAB when searching to avoid clutter
+          if (_isSearching) return null;
+          
           return FloatingActionButton.extended(
             onPressed: () => _showServiceDialog(context, ref, currentOdo: displayOdo),
             label: const Text('Add Service'),
@@ -110,7 +183,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
 
   // --- HEADER ---
   Widget _buildHeader(BuildContext context, WidgetRef ref, int displayOdo, double yearCost, List<Vehicle> allVehicles) {
-    // Check if we need to show dual readings
+    final vehicle = widget.vehicle;
     final bool hasOffset = vehicle.odoOffset > 0;
     final int dashReading = (displayOdo > vehicle.odoOffset) ? (displayOdo - vehicle.odoOffset) : displayOdo;
 
@@ -170,14 +243,9 @@ class VehicleDetailsScreen extends ConsumerWidget {
                   children: [
                     Row(children: [const Text('CURRENT ODO', style: TextStyle(color: Colors.white70, fontSize: 10, letterSpacing: 1)), const SizedBox(width: 4), Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.5))]),
                     const SizedBox(height: 2),
-                    
-                    // Show both if offset exists
                     if (hasOffset) ...[
                       Text('$displayOdo km', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text(
-                        'Dash: $dashReading km', 
-                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.8), fontStyle: FontStyle.italic)
-                      ),
+                      Text('Dash: $dashReading km', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.8), fontStyle: FontStyle.italic)),
                     ] else 
                       Text('$displayOdo km', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   ],
@@ -200,6 +268,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
 
   // --- MANUAL ODO UPDATE ---
   void _showUpdateOdoDialog(BuildContext context, WidgetRef ref, {required int currentOdo}) {
+    final vehicle = widget.vehicle;
     int initialValue = currentOdo;
     if (vehicle.odoOffset > 0 && currentOdo > vehicle.odoOffset) {
       initialValue = currentOdo - vehicle.odoOffset;
@@ -260,6 +329,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
 
   // --- SERVICE DIALOG ---
   void _showServiceDialog(BuildContext context, WidgetRef ref, {ServiceRecord? recordToEdit, required int currentOdo}) {
+    final vehicle = widget.vehicle;
     final isEdit = recordToEdit != null;
     String initialType = kTrackedServices[0];
     if (isEdit) {
@@ -382,10 +452,12 @@ class VehicleDetailsScreen extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, int recordId) {
+    final vehicle = widget.vehicle;
     showDialog(context: context, builder: (context) => AlertDialog(title: const Text('Delete Record?'), content: const Text('This cannot be undone.'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () async { final db = ref.read(databaseProvider); await db.deleteServiceRecord(recordId); ref.refresh(allExpensesProvider); ref.refresh(serviceRecordsProvider(vehicle.id!)); if (context.mounted) Navigator.pop(context); }, child: const Text('Delete', style: TextStyle(color: Colors.red)))]));
   }
 
   Future<void> _importCsv(BuildContext context, WidgetRef ref) async {
+    final vehicle = widget.vehicle;
     try { FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['csv']); if (result != null) { File file = File(result.files.single.path!); final input = file.openRead(); final fields = await input.transform(utf8.decoder).transform(const CsvToListConverter()).toList(); final db = ref.read(databaseProvider); int importCount = 0; for (var i = 1; i < fields.length; i++) { final row = fields[i]; if (row.length < 4) continue; String dateStr = row[0].toString().trim(); String type = row[1].toString().trim(); double cost = double.tryParse(row[2].toString()) ?? 0.0; int odo = int.tryParse(row[3].toString()) ?? 0; String notes = ''; if (row.length > 4) notes = row[4].toString().trim(); DateTime date = DateTime.now(); try { date = DateTime.parse(dateStr); } catch (_) {} final record = ServiceRecord(vehicleId: vehicle.id!, date: date, serviceType: type, cost: cost, odoReading: odo, notes: notes); await db.insertServiceRecord(record); importCount++; } if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Imported $importCount records!'))); ref.refresh(serviceRecordsProvider(vehicle.id!)); ref.refresh(allExpensesProvider); ref.refresh(vehicleListProvider); } } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red)); }
   }
 
@@ -394,7 +466,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
   }
 }
 
-// --- DASHBOARD (Fixed Height) ---
+// --- DASHBOARD ---
 class _MaintenanceDashboard extends StatelessWidget {
   final int vehicleOdo;
   final List<ServiceRecord> records;
@@ -405,7 +477,7 @@ class _MaintenanceDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final trackedItems = kTrackedServices.where((e) => e != 'Other').toList();
     return Container(
-      height: 120, // Keep height generous
+      height: 120, 
       margin: const EdgeInsets.only(bottom: 10),
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -481,7 +553,7 @@ class _MaintenanceDashboard extends StatelessWidget {
   }
 }
 
-// --- TIMELINE ITEM (Horizontal Dash Reading) ---
+// --- TIMELINE ITEM ---
 class _TimelineItem extends StatelessWidget {
   final ServiceRecord record;
   final bool isLast;
@@ -537,19 +609,16 @@ class _TimelineItem extends StatelessWidget {
                       title: Text(record.serviceType, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        // 👇 SINGLE ROW for ODO, DASH, and COST
                         child: Row(
                           children: [
                             Icon(Icons.speed, size: 14, color: Colors.grey.shade600), 
                             const SizedBox(width: 4), 
                             Text(odoText, style: const TextStyle(fontWeight: FontWeight.w500)),
                             
-                            // 👇 DASH READING (If available)
                             if (showDash) ...[
                               const SizedBox(width: 8),
                               Text(
                                 dashText, 
-                                // Standard font style, no italics, same size
                                 style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)
                               ),
                             ],

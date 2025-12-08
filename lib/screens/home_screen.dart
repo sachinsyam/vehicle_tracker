@@ -60,7 +60,7 @@ class HomeScreen extends ConsumerWidget {
               const PopupMenuItem(
                 value: 'migrate',
                 child: Row(
-                  children: [Icon(Icons.move_to_inbox, color: Colors.orange), SizedBox(width: 10), Text('Migrate from Other App')],
+                  children: [Icon(Icons.move_to_inbox, color: Colors.orange), SizedBox(width: 10), Text('Migrate from Simply Auto')],
                 ),
               ),
               const PopupMenuDivider(),

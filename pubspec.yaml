@@ -39,7 +39,7 @@ flutter:
   uses-material-design: true
 
 flutter_launcher_icons:
-  android: "ic_launcher"
+  android: "launcher_icon"
   ios: true
   image_path: "assets/icon.png"
   min_sdk_android: 21 # Support modern Android adaptive icons

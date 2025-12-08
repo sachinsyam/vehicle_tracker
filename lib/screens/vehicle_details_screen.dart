@@ -38,15 +38,12 @@ class VehicleDetailsScreen extends ConsumerWidget {
       body: recordsAsync.when(
         data: (records) {
           // --- CALCULATIONS ---
-          
-          // 1. Calculate the TRUE current ODO (Max of History vs DB)
           int displayOdo = vehicle.currentOdo;
           if (records.isNotEmpty) {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
             if (maxHistory > displayOdo) displayOdo = maxHistory;
           }
 
-          // 2. Calculate Year Cost
           final currentYear = DateTime.now().year;
           final yearCost = records
               .where((r) => r.date.year == currentYear)
@@ -77,6 +74,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
                         return _TimelineItem(
                           record: records[index],
                           isLast: index == records.length - 1,
+                          vehicleOffset: vehicle.odoOffset,
                           ref: ref,
                           onTap: () => _showDetailsDialog(context, records[index]),
                           onEdit: () => _showServiceDialog(context, ref, recordToEdit: records[index], currentOdo: displayOdo),
@@ -112,6 +110,10 @@ class VehicleDetailsScreen extends ConsumerWidget {
 
   // --- HEADER ---
   Widget _buildHeader(BuildContext context, WidgetRef ref, int displayOdo, double yearCost, List<Vehicle> allVehicles) {
+    // Check if we need to show dual readings
+    final bool hasOffset = vehicle.odoOffset > 0;
+    final int dashReading = (displayOdo > vehicle.odoOffset) ? (displayOdo - vehicle.odoOffset) : displayOdo;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -168,7 +170,16 @@ class VehicleDetailsScreen extends ConsumerWidget {
                   children: [
                     Row(children: [const Text('CURRENT ODO', style: TextStyle(color: Colors.white70, fontSize: 10, letterSpacing: 1)), const SizedBox(width: 4), Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.5))]),
                     const SizedBox(height: 2),
-                    Text('$displayOdo km', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                    
+                    // Show both if offset exists
+                    if (hasOffset) ...[
+                      Text('$displayOdo km', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text(
+                        'Dash: $dashReading km', 
+                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.8), fontStyle: FontStyle.italic)
+                      ),
+                    ] else 
+                      Text('$displayOdo km', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   ],
                 ),
               ),
@@ -187,9 +198,8 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
-  // --- MANUAL ODO UPDATE (With Offset Logic) ---
+  // --- MANUAL ODO UPDATE ---
   void _showUpdateOdoDialog(BuildContext context, WidgetRef ref, {required int currentOdo}) {
-    // PRE-FILL LOGIC: Subtract offset so user sees Dashboard Reading
     int initialValue = currentOdo;
     if (vehicle.odoOffset > 0 && currentOdo > vehicle.odoOffset) {
       initialValue = currentOdo - vehicle.odoOffset;
@@ -248,16 +258,13 @@ class VehicleDetailsScreen extends ConsumerWidget {
     );
   }
 
-  // --- SERVICE DIALOG (With Offset Logic) ---
+  // --- SERVICE DIALOG ---
   void _showServiceDialog(BuildContext context, WidgetRef ref, {ServiceRecord? recordToEdit, required int currentOdo}) {
     final isEdit = recordToEdit != null;
     String initialType = kTrackedServices[0];
     if (isEdit) {
-      if (kTrackedServices.contains(recordToEdit.serviceType)) {
-        initialType = recordToEdit.serviceType;
-      } else {
-        initialType = 'Other';
-      }
+      if (kTrackedServices.contains(recordToEdit.serviceType)) initialType = recordToEdit.serviceType;
+      else initialType = 'Other';
     }
 
     String initialOdoText = '';
@@ -291,7 +298,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      initialValue: selectedDropdown,
+                      value: selectedDropdown,
                       decoration: const InputDecoration(labelText: 'Service Type'),
                       items: kTrackedServices.map((String type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
                       onChanged: (val) => setState(() => selectedDropdown = val!),
@@ -343,11 +350,8 @@ class VehicleDetailsScreen extends ConsumerWidget {
                       notes: notesController.text.trim()
                     );
 
-                    if (isEdit) {
-                      await db.updateServiceRecord(record);
-                    } else {
-                      await db.insertServiceRecord(record);
-                    }
+                    if (isEdit) await db.updateServiceRecord(record);
+                    else await db.insertServiceRecord(record);
 
                     if (finalOdo > currentOdo) {
                       final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: finalOdo, odoOffset: vehicle.odoOffset);
@@ -390,7 +394,7 @@ class VehicleDetailsScreen extends ConsumerWidget {
   }
 }
 
-// --- DASHBOARD (Shows Distance Driven Since Service) ---
+// --- DASHBOARD (Fixed Height) ---
 class _MaintenanceDashboard extends StatelessWidget {
   final int vehicleOdo;
   final List<ServiceRecord> records;
@@ -401,7 +405,7 @@ class _MaintenanceDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final trackedItems = kTrackedServices.where((e) => e != 'Other').toList();
     return Container(
-      height: 105,
+      height: 120, // Keep height generous
       margin: const EdgeInsets.only(bottom: 10),
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -417,7 +421,7 @@ class _MaintenanceDashboard extends StatelessWidget {
     final relevantRecords = records.where((r) => r.serviceType == type).toList();
     
     String mainValue = '---'; 
-    String subValue = '---';
+    String subValue = 'Tap to add';
     bool hasData = false;
 
     if (relevantRecords.isNotEmpty) {
@@ -461,11 +465,7 @@ class _MaintenanceDashboard extends StatelessWidget {
               Expanded(
                 child: Text(
                   type,
-                  style: TextStyle(
-                    fontSize: 12, 
-                    color: Colors.grey.shade600, 
-                    fontWeight: FontWeight.bold
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -473,35 +473,45 @@ class _MaintenanceDashboard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            mainValue,
-            style: TextStyle(
-              fontSize: 18, 
-              fontWeight: FontWeight.bold, 
-              color: hasData ? Colors.black87 : Colors.grey.shade300
-            ),
-          ),
-          Text(
-            subValue, 
-            style: const TextStyle(fontSize: 11, color: Colors.blueGrey)
-          ),
+          Text(mainValue, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: hasData ? Colors.black87 : Colors.grey.shade300)),
+          Text(subValue, style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
         ],
       ),
     );
   }
 }
 
+// --- TIMELINE ITEM (Horizontal Dash Reading) ---
 class _TimelineItem extends StatelessWidget {
   final ServiceRecord record;
   final bool isLast;
+  final int vehicleOffset; 
   final WidgetRef ref;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  const _TimelineItem({required this.record, required this.isLast, required this.ref, required this.onTap, required this.onEdit, required this.onDelete});
+
+  const _TimelineItem({
+    required this.record, 
+    required this.isLast, 
+    required this.vehicleOffset,
+    required this.ref, 
+    required this.onTap, 
+    required this.onEdit, 
+    required this.onDelete
+  });
 
   @override
   Widget build(BuildContext context) {
+    String odoText = '${record.odoReading} km';
+    bool showDash = false;
+    String dashText = '';
+
+    if (vehicleOffset > 0 && record.odoReading > vehicleOffset) {
+      showDash = true;
+      dashText = '(Dash: ${record.odoReading - vehicleOffset} km)';
+    }
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,7 +537,28 @@ class _TimelineItem extends StatelessWidget {
                       title: Text(record.serviceType, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Row(children: [Icon(Icons.speed, size: 14, color: Colors.grey.shade600), const SizedBox(width: 4), Text('${record.odoReading} km'), const SizedBox(width: 16), Icon(Icons.currency_rupee, size: 14, color: Theme.of(context).colorScheme.secondary), Text(record.cost.toStringAsFixed(0), style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold))]),
+                        // 👇 SINGLE ROW for ODO, DASH, and COST
+                        child: Row(
+                          children: [
+                            Icon(Icons.speed, size: 14, color: Colors.grey.shade600), 
+                            const SizedBox(width: 4), 
+                            Text(odoText, style: const TextStyle(fontWeight: FontWeight.w500)),
+                            
+                            // 👇 DASH READING (If available)
+                            if (showDash) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                dashText, 
+                                // Standard font style, no italics, same size
+                                style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)
+                              ),
+                            ],
+
+                            const SizedBox(width: 16), 
+                            Icon(Icons.currency_rupee, size: 14, color: Theme.of(context).colorScheme.secondary), 
+                            Text(record.cost.toStringAsFixed(0), style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold))
+                          ],
+                        ),
                       ),
                       trailing: PopupMenuButton<String>(icon: const Icon(Icons.more_vert, size: 20), onSelected: (val) { if (val == 'edit') onEdit(); if (val == 'delete') onDelete(); }, itemBuilder: (context) => [const PopupMenuItem(value: 'edit', child: Text('Edit')), const PopupMenuItem(value: 'delete', child: Text('Delete'))]),
                     ),

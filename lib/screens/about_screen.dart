@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers.dart';
+import '../data/database.dart';
 
-class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
+class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
   final String _repoUrl = 'https://github.com/sachinsyam/vehicle_tracker';
@@ -16,7 +17,7 @@ class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) { // 👈 Added WidgetRef ref
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
       body: Center(
@@ -27,15 +28,16 @@ class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
             children: [
               // App Icon / Logo
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(15), // Reduced padding slightly for the image
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primaryContainer,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.directions_car_filled,
-                  size: 60,
-                  color: Theme.of(context).colorScheme.primary,
+                // 👇 REPLACED ICON WITH ASSET IMAGE
+                child: Image.asset(
+                  'assets/icon.png',
+                  width: 80,
+                  height: 80,
                 ),
               ),
               const SizedBox(height: 20),
@@ -70,6 +72,25 @@ class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
               ),
+
+              const SizedBox(height: 15),
+
+              // License Button
+              OutlinedButton(
+                onPressed: () {
+                  showLicensePage(
+                    context: context,
+                    applicationName: 'My Garage',
+                    applicationVersion: '1.0.0',
+                    // Also use the asset icon here
+                    applicationIcon: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Image.asset('assets/icon.png', width: 48, height: 48),
+                    ),
+                  );
+                },
+                child: const Text('Open Source Licenses'),
+              ),
               
               const SizedBox(height: 20),
               
@@ -78,21 +99,19 @@ class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
                 child: const Text('Close'),
               ),
 
-              // 👇 NUKE DATA BUTTON
+              // 👇 NUKE DATA BUTTON (Commented out for release)
+              /*
               const SizedBox(height: 40),
               const Divider(),
               const SizedBox(height: 10),
               TextButton.icon(
                 onPressed: () async {
-                  // 1. Delete all data
                   final db = ref.read(databaseProvider);
                   await db.deleteAllData();
                   
-                  // 2. Refresh UI
                   ref.refresh(vehicleListProvider);
                   ref.refresh(allExpensesProvider);
                   
-                  // 3. Show feedback
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -108,6 +127,7 @@ class AboutScreen extends ConsumerWidget { // 👈 Changed to ConsumerWidget
                   style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
                 ),
               ),
+              */
             ],
           ),
         ),

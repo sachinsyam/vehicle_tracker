@@ -1,4 +1,4 @@
-# 🚗 My Garage (VMT)
+# VM Tracker
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Android-green.svg)

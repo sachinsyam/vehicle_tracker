@@ -333,8 +333,11 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
     final isEdit = recordToEdit != null;
     String initialType = kTrackedServices[0];
     if (isEdit) {
-      if (kTrackedServices.contains(recordToEdit.serviceType)) initialType = recordToEdit.serviceType;
-      else initialType = 'Other';
+      if (kTrackedServices.contains(recordToEdit.serviceType)) {
+        initialType = recordToEdit.serviceType;
+      } else {
+        initialType = 'Other';
+      }
     }
 
     String initialOdoText = '';
@@ -368,7 +371,7 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      value: selectedDropdown,
+                      initialValue: selectedDropdown,
                       decoration: const InputDecoration(labelText: 'Service Type'),
                       items: kTrackedServices.map((String type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
                       onChanged: (val) => setState(() => selectedDropdown = val!),
@@ -420,8 +423,11 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
                       notes: notesController.text.trim()
                     );
 
-                    if (isEdit) await db.updateServiceRecord(record);
-                    else await db.insertServiceRecord(record);
+                    if (isEdit) {
+                      await db.updateServiceRecord(record);
+                    } else {
+                      await db.insertServiceRecord(record);
+                    }
 
                     if (finalOdo > currentOdo) {
                       final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: finalOdo, odoOffset: vehicle.odoOffset);

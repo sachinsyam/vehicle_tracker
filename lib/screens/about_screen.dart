@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../providers.dart';
-import '../data/database.dart';
 
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});

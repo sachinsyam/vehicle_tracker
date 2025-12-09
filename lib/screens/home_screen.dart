@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../providers.dart';
+import '../data/database.dart';
 import '../data/models.dart';
 import 'vehicle_details_screen.dart';
-import 'expense_report_screen.dart';
-import 'import_screen.dart';
-import 'about_screen.dart';
-import '../services/backup_service.dart';
-import '../services/migration_service.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -17,101 +14,23 @@ class HomeScreen extends ConsumerWidget {
     final vehicleListAsync = ref.watch(vehicleListProvider);
 
     return Scaffold(
-      // 👇 CHANGED: Light Grey background makes white cards pop
-      backgroundColor: Colors.grey.shade200, 
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: const Text('My Garage'),
-        backgroundColor: Colors.transparent, // Optional: Makes AppBar blend better
-        elevation: 0,
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              final backupService = BackupService(context, ref);
-              final migrationService = MigrationService(context, ref);
-
-              if (value == 'backup') {
-                backupService.createBackup();
-              } else if (value == 'restore') {
-                backupService.restoreBackup();
-              } else if (value == 'migrate') {
-                migrationService.importFromZip();
-              } else if (value == 'about') {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (_) => const AboutScreen())
-                );
-              }
-            },
-            itemBuilder: (BuildContext context) => [
-              const PopupMenuItem(
-                value: 'backup',
-                child: Row(
-                  children: [Icon(Icons.save_alt, color: Colors.blue), SizedBox(width: 10), Text('Backup Data')],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'restore',
-                child: Row(
-                  children: [Icon(Icons.restore_page, color: Colors.green), SizedBox(width: 10), Text('Restore Backup')],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'migrate',
-                child: Row(
-                  children: [Icon(Icons.move_to_inbox, color: Colors.orange), SizedBox(width: 10), Text('Migrate from Simply Auto')],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'about',
-                child: Row(
-                  children: [Icon(Icons.info_outline, color: Colors.grey), SizedBox(width: 10), Text('About')],
-                ),
-              ),
-            ],
-          ),
-          
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Import Single CSV',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ImportScreen()),
-              );
-            },
-          ),
-          
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            tooltip: 'Expense Report',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ExpenseReportScreen()),
-              );
-            },
-          ),
-        ],
+        title: const Text('Vehicle Maintenance Tracker'),
+        centerTitle: true,
       ),
-
       body: vehicleListAsync.when(
         data: (vehicles) {
-          if (vehicles.isEmpty) {
-            return _buildEmptyState(context, ref);
-          }
+          if (vehicles.isEmpty) return _buildEmptyState(context, ref);
+          
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: vehicles.length,
-            separatorBuilder: (c, i) => const SizedBox(height: 12),
+            separatorBuilder: (c, i) => const SizedBox(height: 16),
             itemBuilder: (context, index) {
-              return _VehicleCard(
+              return _HeroVehicleCard(
                 vehicle: vehicles[index],
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => VehicleDetailsScreen(vehicle: vehicles[index])),
-                ),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VehicleDetailsScreen(vehicle: vehicles[index]))),
                 onEdit: () => _showVehicleDialog(context, ref, vehicleToEdit: vehicles[index]),
               );
             },
@@ -122,8 +41,8 @@ class HomeScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showVehicleDialog(context, ref),
-        label: const Text('Add Vehicle'),
-        icon: const Icon(Icons.add_circle_outline),
+        label: const Text('Add Ride'),
+        icon: const Icon(Icons.add),
       ),
     );
   }
@@ -133,25 +52,18 @@ class HomeScreen extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.garage_outlined, size: 80, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'Your garage is empty',
-            style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 4),
-          TextButton(
-            onPressed: () => _showVehicleDialog(context, ref), 
-            child: const Text('Add a vehicle now')
-          ),
+          FaIcon(FontAwesomeIcons.warehouse, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 20),
+          Text('Garage Empty', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.grey)),
+          const SizedBox(height: 10),
+          OutlinedButton(onPressed: () => _showVehicleDialog(context, ref), child: const Text('Park your first vehicle')),
         ],
       ),
     );
   }
-  
+
   void _showVehicleDialog(BuildContext context, WidgetRef ref, {Vehicle? vehicleToEdit}) {
     final isEdit = vehicleToEdit != null;
-    
     final nameController = TextEditingController(text: isEdit ? vehicleToEdit.name : '');
     final makeController = TextEditingController(text: isEdit ? vehicleToEdit.make : '');
     final modelController = TextEditingController(text: isEdit ? vehicleToEdit.model : '');
@@ -167,44 +79,34 @@ class HomeScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nickname', prefixIcon: Icon(Icons.abc))),
-              TextField(controller: makeController, decoration: const InputDecoration(labelText: 'Make', prefixIcon: Icon(Icons.branding_watermark))),
-              TextField(controller: modelController, decoration: const InputDecoration(labelText: 'Model', prefixIcon: Icon(Icons.car_repair))),
-              TextField(controller: odoController, decoration: const InputDecoration(labelText: 'Current ODO', prefixIcon: Icon(Icons.speed)), keyboardType: TextInputType.number),
-              
               const SizedBox(height: 10),
-              TextField(
-                controller: offsetController, 
-                decoration: const InputDecoration(
-                  labelText: 'ODO Offset (Optional)', 
-                  prefixIcon: Icon(Icons.exposure_plus_1),
-                  helperText: 'Added to dashboard reading automatically',
-                ), 
-                keyboardType: TextInputType.number
-              ),
+              Row(children: [
+                Expanded(child: TextField(controller: makeController, decoration: const InputDecoration(labelText: 'Make'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: modelController, decoration: const InputDecoration(labelText: 'Model'))),
+              ]),
+              const SizedBox(height: 10),
+              TextField(controller: odoController, decoration: const InputDecoration(labelText: 'Current ODO', suffixText: 'km'), keyboardType: TextInputType.number),
+              const SizedBox(height: 10),
+              TextField(controller: offsetController, decoration: const InputDecoration(labelText: 'Offset (Optional)', helperText: 'If speedometer was replaced'), keyboardType: TextInputType.number),
             ],
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
+          FilledButton(
             onPressed: () async {
               final db = ref.read(databaseProvider);
-              
               final vehicle = Vehicle(
-                id: isEdit ? vehicleToEdit.id : null, 
+                id: isEdit ? vehicleToEdit.id : null,
                 name: nameController.text,
                 make: makeController.text,
                 model: modelController.text,
                 currentOdo: int.tryParse(odoController.text) ?? 0,
-                odoOffset: int.tryParse(offsetController.text) ?? 0, 
+                odoOffset: int.tryParse(offsetController.text) ?? 0,
               );
-
-              if (isEdit) {
-                await db.updateVehicle(vehicle);
-              } else {
-                await db.insertVehicle(vehicle);
-              }
-              
+              if (isEdit) await db.updateVehicle(vehicle);
+              else await db.insertVehicle(vehicle);
               ref.refresh(vehicleListProvider);
               if (context.mounted) Navigator.pop(context);
             },
@@ -216,72 +118,112 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _VehicleCard extends StatelessWidget {
+class _HeroVehicleCard extends StatelessWidget {
   final Vehicle vehicle;
   final VoidCallback onTap;
   final VoidCallback onEdit;
 
-  const _VehicleCard({required this.vehicle, required this.onTap, required this.onEdit});
+  const _HeroVehicleCard({required this.vehicle, required this.onTap, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
+    // Detect Dark Mode
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Card(
-      elevation: 2, // Slight elevation makes it stand out on grey
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Colors.white, // Ensure card is white
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      elevation: 0, // Flat look
+      // 👇 CUSTOM COLOR LOGIC: 
+      // Dark Mode: Dark Slate Grey (popping against black)
+      // Light Mode: Pure White
+      color: isDark ? const Color(0xFF25282B) : Colors.white,
+      
+      // 👇 BORDER LOGIC: Subtle border for definition
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.transparent,
+          width: 1,
+        ),
+      ),
+      
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+        child: Container(
+          height: 150,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon Container
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.directions_car_filled, 
-                  color: Theme.of(context).colorScheme.primary),
+              // Top Row: Name + Edit
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      vehicle.name, 
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        height: 1.1,
+                        color: Theme.of(context).colorScheme.onSurface
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit), 
+                    onPressed: onEdit,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                ],
               ),
-              const SizedBox(width: 16),
-              // Text Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(vehicle.name, 
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text('${vehicle.make} ${vehicle.model}',
-                      style: TextStyle(color: Colors.grey.shade600)),
-                  ],
-                ),
-              ),
-              // ODO Chip
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Text('${vehicle.currentOdo} km', 
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-              ),
-              // Edit Button
-              IconButton(
-                icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
-                onPressed: onEdit,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
+              
+              const Spacer(),
+              
+              // Bottom Row: ODO Chip
+              Row(
+                children: [
+                  _InfoChip(icon: Icons.speed, label: '${vehicle.currentOdo} km'),
+                ],
+              )
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _InfoChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        // Use a Surface Container color for the chip background
+        color: Theme.of(context).colorScheme.surfaceContainerHighest, 
+        borderRadius: BorderRadius.circular(20)
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            label, 
+            style: TextStyle(
+              fontWeight: FontWeight.bold, 
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant
+            )
+          ),
+        ],
       ),
     );
   }

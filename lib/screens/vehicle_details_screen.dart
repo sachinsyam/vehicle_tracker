@@ -14,7 +14,6 @@ const List<String> kTrackedServices = [
   'Engine Oil', 'Brake Fluid', 'Air Filter', 'Spark Plug', 'Fuel Cleaner', 'Other' 
 ];
 
-// 👇 Changed to ConsumerStatefulWidget to handle Search State
 class VehicleDetailsScreen extends ConsumerStatefulWidget {
   final Vehicle vehicle;
 
@@ -38,22 +37,21 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final vehicle = widget.vehicle; // Access vehicle from widget
+    final vehicle = widget.vehicle;
     final recordsAsync = ref.watch(serviceRecordsProvider(vehicle.id!));
     final allVehiclesAsync = ref.watch(vehicleListProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        // 👇 Dynamic Title: Show TextField if searching
         title: _isSearching
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: const TextStyle(color: Color.fromARGB(255, 0, 0, 0)),
+                style: const TextStyle(color: Colors.black),
                 decoration: const InputDecoration(
                   hintText: 'Search notes, service type...',
-                  hintStyle: TextStyle(color: Color.fromARGB(179, 114, 107, 107)),
+                  hintStyle: TextStyle(color: Colors.black54),
                   border: InputBorder.none,
                 ),
                 onChanged: (value) {
@@ -62,10 +60,9 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
                   });
                 },
               )
-            : null, // Default empty title to let Header handle context
+            : null,
         
         actions: [
-          // 👇 Search Toggle Logic
           if (_isSearching)
             IconButton(
               icon: const Icon(Icons.close),
@@ -97,7 +94,6 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
       ),
       body: recordsAsync.when(
         data: (records) {
-          // --- CALCULATIONS (Using ALL records) ---
           int displayOdo = vehicle.currentOdo;
           if (records.isNotEmpty) {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
@@ -109,7 +105,6 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
               .where((r) => r.date.year == currentYear)
               .fold(0.0, (sum, r) => sum + r.cost);
 
-          // --- FILTERING LOGIC ---
           final filteredRecords = records.where((r) {
             if (_searchQuery.isEmpty) return true;
             return r.serviceType.toLowerCase().contains(_searchQuery) ||
@@ -119,19 +114,16 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
 
           return Column(
             children: [
-              // Header
               allVehiclesAsync.when(
                 data: (allVehicles) => _buildHeader(context, ref, displayOdo, yearCost, allVehicles),
                 loading: () => const SizedBox(height: 100), 
                 error: (_, __) => const SizedBox(),
               ),
 
-              // Dashboard
               _MaintenanceDashboard(vehicleOdo: displayOdo, records: records),
 
               const SizedBox(height: 10),
 
-              // Timeline List (Uses FILTERED records)
               Expanded(
                 child: filteredRecords.isEmpty 
                   ? (_searchQuery.isEmpty 
@@ -166,7 +158,6 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
             final maxHistory = records.map((r) => r.odoReading).reduce((a, b) => a > b ? a : b);
             if (maxHistory > displayOdo) displayOdo = maxHistory;
           }
-          // Hide FAB when searching to avoid clutter
           if (_isSearching) return null;
           
           return FloatingActionButton.extended(
@@ -181,7 +172,6 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
     );
   }
 
-  // --- HEADER ---
   Widget _buildHeader(BuildContext context, WidgetRef ref, int displayOdo, double yearCost, List<Vehicle> allVehicles) {
     final vehicle = widget.vehicle;
     final bool hasOffset = vehicle.odoOffset > 0;
@@ -266,7 +256,6 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
     );
   }
 
-  // --- MANUAL ODO UPDATE ---
   void _showUpdateOdoDialog(BuildContext context, WidgetRef ref, {required int currentOdo}) {
     final vehicle = widget.vehicle;
     int initialValue = currentOdo;
@@ -327,25 +316,29 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
     );
   }
 
-  // --- SERVICE DIALOG ---
+  // --- SERVICE DIALOG (Updated Logic) ---
   void _showServiceDialog(BuildContext context, WidgetRef ref, {ServiceRecord? recordToEdit, required int currentOdo}) {
     final vehicle = widget.vehicle;
     final isEdit = recordToEdit != null;
+    
+    // --- Pre-fill Data ---
     String initialType = kTrackedServices[0];
     if (isEdit) {
-      if (kTrackedServices.contains(recordToEdit.serviceType)) {
-        initialType = recordToEdit.serviceType;
-      } else {
-        initialType = 'Other';
-      }
+      if (kTrackedServices.contains(recordToEdit.serviceType)) initialType = recordToEdit.serviceType;
+      else initialType = 'Other';
     }
 
     String initialOdoText = '';
     if (isEdit) {
+      // Just show the raw reading (DB value), but we will disable editing anyway
+      // For display purposes, if offset exists, we could show dash reading, 
+      // but simpler to just show what's in DB for clarity since it's locked.
+      // Actually, let's show the Dash Reading for consistency, but locked.
       int raw = recordToEdit.odoReading;
       if (vehicle.odoOffset > 0 && raw > vehicle.odoOffset) raw -= vehicle.odoOffset;
       initialOdoText = raw.toString();
     } else {
+      // Adding new: Show Dash Reading logic
       int raw = currentOdo;
       if (vehicle.odoOffset > 0 && raw > vehicle.odoOffset) raw -= vehicle.odoOffset;
       initialOdoText = raw.toString();
@@ -371,21 +364,27 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      initialValue: selectedDropdown,
+                      value: selectedDropdown,
                       decoration: const InputDecoration(labelText: 'Service Type'),
                       items: kTrackedServices.map((String type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
                       onChanged: (val) => setState(() => selectedDropdown = val!),
                     ),
                     if (isOther) TextField(controller: customTypeController, decoration: const InputDecoration(labelText: 'Custom Name')),
                     TextField(controller: costController, decoration: const InputDecoration(labelText: 'Cost (₹)'), keyboardType: TextInputType.number),
+                    
+                    // 👇 DISABLED ODO FIELD IF EDITING
                     TextField(
                       controller: odoController, 
+                      enabled: !isEdit, // Disable if editing
                       decoration: InputDecoration(
                         labelText: 'Dashboard Reading', 
-                        helperText: vehicle.odoOffset > 0 ? '+ ${vehicle.odoOffset} km offset' : null
+                        helperText: isEdit 
+                            ? 'Cannot change ODO on edit' 
+                            : (vehicle.odoOffset > 0 ? '+ ${vehicle.odoOffset} km offset' : null),
                       ), 
                       keyboardType: TextInputType.number
                     ),
+                    
                     TextField(controller: notesController, decoration: const InputDecoration(labelText: 'Notes (Optional)'), maxLines: 2),
                     const SizedBox(height: 20),
                     Row(
@@ -402,12 +401,18 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: () async {
-                    final int inputReading = int.tryParse(odoController.text) ?? 0;
-                    final int finalOdo = inputReading + vehicle.odoOffset;
-
-                    if (!isEdit && finalOdo < currentOdo) {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New Total cannot be less than current!'), backgroundColor: Colors.red));
-                       return;
+                    // Logic: If editing, use OLD reading. If new, calculate NEW reading.
+                    int finalOdo;
+                    if (isEdit) {
+                        finalOdo = recordToEdit.odoReading; // Keep existing value
+                    } else {
+                        final int inputReading = int.tryParse(odoController.text) ?? 0;
+                        finalOdo = inputReading + vehicle.odoOffset;
+                        
+                        if (finalOdo < currentOdo) {
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New Total cannot be less than current!'), backgroundColor: Colors.red));
+                           return;
+                        }
                     }
 
                     String finalType = selectedDropdown == 'Other' ? customTypeController.text.trim() : selectedDropdown;
@@ -423,13 +428,10 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
                       notes: notesController.text.trim()
                     );
 
-                    if (isEdit) {
-                      await db.updateServiceRecord(record);
-                    } else {
-                      await db.insertServiceRecord(record);
-                    }
+                    if (isEdit) await db.updateServiceRecord(record);
+                    else await db.insertServiceRecord(record);
 
-                    if (finalOdo > currentOdo) {
+                    if (!isEdit && finalOdo > currentOdo) {
                       final updatedVehicle = Vehicle(id: vehicle.id, name: vehicle.name, make: vehicle.make, model: vehicle.model, currentOdo: finalOdo, odoOffset: vehicle.odoOffset);
                       await db.updateVehicle(updatedVehicle);
                       ref.refresh(vehicleListProvider);
@@ -448,7 +450,6 @@ class _VehicleDetailsScreenState extends ConsumerState<VehicleDetailsScreen> {
     );
   }
 
-  // --- DETAILS ---
   void _showDetailsDialog(BuildContext context, ServiceRecord record) {
     showDialog(context: context, builder: (context) { return AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), title: Row(children: [CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(Icons.build, color: Theme.of(context).colorScheme.primary)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(record.serviceType, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), Text(DateFormat('MMMM dd, yyyy').format(record.date), style: TextStyle(fontSize: 12, color: Colors.grey.shade600))]))]), content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [const Divider(), const SizedBox(height: 10), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildDetailItem(context, Icons.currency_rupee, 'Cost', '₹${record.cost.toStringAsFixed(0)}'), _buildDetailItem(context, Icons.speed, 'ODO', '${record.odoReading} km')]), const SizedBox(height: 20), const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), const SizedBox(height: 5), Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)), child: Text(record.notes.isEmpty ? 'No notes added.' : record.notes, style: TextStyle(color: record.notes.isEmpty ? Colors.grey : Colors.black87, fontStyle: record.notes.isEmpty ? FontStyle.italic : FontStyle.normal)))]), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]); });
   }
